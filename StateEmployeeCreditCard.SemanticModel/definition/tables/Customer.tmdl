@@ -63,10 +63,26 @@ table Customer
 					// Started from the already-cleaned Transactions query so both tables stay perfectly consistent
 					Source = Transactions,
 
+					// Normalized the case of DeptName/DivName/CustomerKey BEFORE grouping. The source data has a small
+					// number of divisions whose casing is inconsistent (e.g. "PUBLIC DEFENDER" vs "Public Defender"
+					// under department LEGAL). Table.Group below is case-SENSITIVE (M's default text comparer), so
+					// without this step those rows would survive grouping as two separate "duplicate" groups whose
+					// CustomerKey text differs only by case. Power BI's data model (VertiPaq/DAX) compares text
+					// case-INSENSITIVELY, so it would then reject the two differently-cased CustomerKey values as a
+					// duplicate on the "one" side of the Customer<->Transactions relationship, breaking refresh.
+					// Upper-casing here (matching DeptName's existing 100%-uppercase convention in the source data)
+					// collapses any such case-variant rows into a single true group before grouping ever runs.
+					#"Normalized Case" = Table.TransformColumns(Source, {{"DeptName", Text.Upper, type text}, {"DivName", Text.Upper, type text}, {"CustomerKey", Text.Upper, type text}}),
+
 					// Grouped every transaction row up to its cardholder-group "customer" proxy (Department + Division)
-					#"Grouped By Customer" = Table.Group(Source, {"CustomerKey", "DeptName", "DivName"}, {{"TransactionCount", each Table.RowCount(_), Int64.Type}, {"TotalSpend", each List.Sum([TransactionAmount]), type number}, {"AvgTransactionAmount", each List.Average([TransactionAmount]), type number}, {"MaxTransactionAmount", each List.Max([TransactionAmount]), type number}}),
+					#"Grouped By Customer" = Table.Group(#"Normalized Case", {"CustomerKey", "DeptName", "DivName"}, {{"TransactionCount", each Table.RowCount(_), Int64.Type}, {"TotalSpend", each List.Sum([TransactionAmount]), type number}, {"AvgTransactionAmount", each List.Average([TransactionAmount]), type number}, {"MaxTransactionAmount", each List.Max([TransactionAmount]), type number}}),
 
 					// Derived a proxy credit limit as 3x the largest single transaction observed for the group, since the source has no real credit-limit field
-					#"Added Credit Limit Proxy" = Table.AddColumn(#"Grouped By Customer", "CreditLimitProxy", each Number.Round([MaxTransactionAmount] * 3, 2), type number)
+					#"Added Credit Limit Proxy" = Table.AddColumn(#"Grouped By Customer", "CreditLimitProxy", each Number.Round([MaxTransactionAmount] * 3, 2), type number),
+
+					// Final safety net: CustomerKey is the "one" side of a relationship, so refresh fails outright if it
+					// is ever violated. Guarantees uniqueness even if future source data introduces another case or
+					// whitespace variant that the normalization above doesn't anticipate.
+					#"Distinct Customer Key" = Table.Distinct(#"Added Credit Limit Proxy", {"CustomerKey"})
 				in
-					#"Added Credit Limit Proxy"
+					#"Distinct Customer Key"
