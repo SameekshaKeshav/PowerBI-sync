@@ -182,8 +182,9 @@ table Transactions
 		mode: import
 		source =
 				let
-					// Read the raw pipe-free, comma-delimited CSV export from the project's local data folder
-					Source = Csv.Document(File.Contents(ProjectFolder & "/data/State_Employee_Credit_Card.csv"), [Delimiter=",", Columns=8, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
+					// Read the raw pipe-free, comma-delimited CSV export from the project's local data folder.
+					// ProjectFolder is a Power Query parameter (see expressions.tmdl) so the path can be fixed in Power BI Desktop (Transform Data > Manage Parameters) without editing this query whenever the project moves or Power BI Desktop runs on a different machine/VM.
+					Source = Csv.Document(File.Contents(ProjectFolder & "\data\State_Employee_Credit_Card.csv"), [Delimiter=",", Columns=8, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
 
 					// Promoted the first row of the CSV to become column headers
 					#"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),

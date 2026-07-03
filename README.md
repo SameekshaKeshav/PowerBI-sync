@@ -64,7 +64,7 @@ All of this is implemented transparently in Power Query / DAX (not hidden) — s
 
 Implemented entirely in `StateEmployeeCreditCard.SemanticModel/definition/tables/Transactions.tmdl`, the M script:
 
-1. Reads the CSV from `data/State_Employee_Credit_Card.csv` via the `ProjectFolder` Power Query parameter (see "Manual steps" below).
+1. Reads the CSV from `data/State_Employee_Credit_Card.csv` via the `ProjectFolder` Power Query parameter (see "Fixing the data source path" below).
 2. Promotes headers and sets initial types.
 3. Strips thousands-separator commas from `MERCHANDISE_AMT` and converts it to a proper number; parses `TRANS_DT` (mm/dd/yyyy, `en-US` locale) into a real `date`.
 4. Trims text columns and renames all columns to business-friendly names (`DeptName`, `TransactionAmount`, etc.).
@@ -113,14 +113,45 @@ The `Customer` table's M query references the `Transactions` query directly and 
 
 ## How to open in Power BI Desktop
 
-1. Copy/clone this whole folder to the machine that has Power BI Desktop installed (keep the `.pbip` file, both `.SemanticModel`/`.Report` folders, and `data/` together).
+1. Copy/clone this whole folder to the machine (or shared/mounted folder) that Power BI Desktop reads from (keep the `.pbip` file, both `.SemanticModel`/`.Report` folders, and `data/` together).
 2. Double-click `StateEmployeeCreditCard.pbip`. Power BI Desktop will open the report and the semantic model together.
-3. **If the project folder path is different from `/Users/skeshav/Projects/powerbi-project`** (e.g. you copied it to Windows or a different folder), update the `ProjectFolder` Power Query parameter once: **Transform data → Manage Parameters → ProjectFolder** → set it to the new absolute path of the project's root folder (the folder containing the `data` subfolder), using forward slashes (e.g. `C:/Users/you/StateEmployeeCreditCard`). Then select **Home → Refresh**.
-4. Even if the path didn't change, Power BI Desktop needs to run Power Query at least once: select **Home → Refresh** after opening so the semantic model loads data from `data/State_Employee_Credit_Card.csv`.
+3. **All visuals will show blank until you set the `ProjectFolder` parameter to a path Power BI Desktop can actually resolve** — see "Fixing the data source path" below. This is required any time the project is opened on a machine other than the one it was authored on (e.g. a standalone Windows PC with its own git clone of this repo, or a Windows VM), since a Mac-style `/Users/...` path never resolves from Windows.
+4. Select **Home → Refresh** after opening so the semantic model loads data from `data/State_Employee_Credit_Card.csv`.
 5. Both report pages should then render with live data.
+
+### Fixing the data source path (`ProjectFolder` parameter)
+
+Power Query cannot express a true "relative to the .pbip" path, so the CSV path is built from a single text parameter, `ProjectFolder`, defined in `StateEmployeeCreditCard.SemanticModel/definition/expressions.tmdl`. The `Transactions` table's Power Query (M) code reads the file as:
+
+```
+Csv.Document(File.Contents(ProjectFolder & "\data\State_Employee_Credit_Card.csv"), ...)
+```
+
+So `ProjectFolder` must be set to the path of **this repo's root folder** (the folder that directly contains the `data` subfolder), **as seen from wherever Power BI Desktop is actually running** — not necessarily the Mac path you'd type in Finder/Terminal.
+
+**Current shipped default:** `C:\Users\YourUsername\Documents\GitHub\PowerBI-Sync` — this is a **placeholder and will not exist on your machine**. This project is intended to run from a standalone Windows PC with its own local git clone of this repo, so you must update the parameter to wherever you actually cloned/copied it (e.g. `C:\Users\jsmith\Documents\GitHub\PowerBI-Sync`, or wherever `git clone` put it on that machine). If you instead run Power BI Desktop inside a Windows VM on a Mac, use the VM's shared-folder path to the Mac instead (see the note at the end of this section).
+
+**Step-by-step: point Power BI Desktop at the right path**
+
+1. In Power BI Desktop, go to **Home → Transform data → Transform data** (opens the Power Query Editor).
+2. In the Power Query Editor ribbon, go to **Home → Manage Parameters → Manage Parameters...**
+3. Select the **`ProjectFolder`** parameter in the list on the left.
+4. In **Current Value**, paste the correct path to this project's root folder *as seen from inside Windows* (the folder containing `data\State_Employee_Credit_Card.csv`), then click **OK**.
+5. Back in the Power Query Editor, click **Close & Apply** (or in the main Power BI Desktop window, **Home → Refresh**) to reload the data.
+
+**How to find the correct path on a standalone Windows PC:**
+
+- Open **File Explorer** and navigate to wherever you cloned/copied this repo (e.g. after running `git clone`, this is typically under `C:\Users\<you>\Documents\GitHub\PowerBI-Sync` or wherever you chose).
+- Click into the address bar to copy the exact, full path Windows shows.
+- Use that exact path (the folder containing `data`, i.e. *without* `\data` on the end) as the `ProjectFolder` value in step 4 above.
+
+**If instead you're running Power BI Desktop inside a Windows VM on a Mac:** open File Explorer in the VM and browse to wherever the Mac's file system is shared/mounted (Parallels typically shares it as `\\Mac\Home`, sometimes as a mapped drive like `Z:\`; VMware Fusion typically uses `\\vmware-host\Shared Folders\...`), then navigate to this repo's location and copy that path instead.
+
+If the path is still wrong after this, visuals will stay blank and refreshing will throw a "file not found" / "Access to the resource is forbidden" style error in Power BI Desktop — that error, if it occurs, confirms the parameter still doesn't point at a location Windows can see.
 
 ### Manual steps / known limitations
 - **Refresh required on first open** — Power Query only runs when you refresh; the PBIP ships with no cached data.
-- **`ProjectFolder` parameter** — Power Query cannot express a true "relative to the .pbip" path, so a text parameter holding the absolute project folder is used instead (see step 3 above). This is the standard, documented workaround for portability in PBIP projects.
+- **`ProjectFolder` parameter** — see "Fixing the data source path" above. This is the standard, documented workaround for portability in PBIP projects, since Power Query has no concept of a path relative to the `.pbip` file itself.
+- **Path is per-machine** — a Mac absolute path (`/Users/...`) is meaningless to Power BI Desktop on Windows; `ProjectFolder` must always be a Windows-visible path (a local path like `C:\Users\you\...` on a standalone PC, or a UNC/shared-drive path if running inside a VM).
 - **Large table visual** — the anomaly-detail table on page 1 is bound to all ~196.8k transaction rows; Power BI Desktop will page/virtualize it, but initial rendering may take a few seconds on first load.
 - Lineage tags / GUIDs for tables and relationships were authored by hand with simple, stable placeholder values; Power BI Desktop will keep them as-is (it does not require them to look like real GUIDs).

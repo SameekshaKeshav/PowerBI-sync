@@ -1,3 +1,4 @@
-/// Root folder of the StateEmployeeCreditCard PBIP project on disk. The CSV is read from "<ProjectFolder>/data/State_Employee_Credit_Card.csv".
-/// If you move the project folder, update this parameter's Current Value via Power Query Editor > Manage Parameters, then Home > Refresh.
-expression ProjectFolder = "/Users/skeshav/Projects/powerbi-project" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+/// Root folder of the StateEmployeeCreditCard PBIP project, AS SEEN FROM WHEREVER POWER BI DESKTOP ACTUALLY RUNS. The CSV is read from "<ProjectFolder>\data\State_Employee_Credit_Card.csv".
+/// This project is designed to run on its own Windows PC with a local git clone of this repo (not a Mac VM share). Default value below is a PLACEHOLDER - it will not exist on your machine. Update it to wherever you cloned/copied this repo, e.g. "C:\Users\<you>\Documents\GitHub\PowerBI-Sync". See README.md "Fixing the data source path" for exact steps.
+/// If you move the project folder, or clone it onto a new machine, update this parameter's Current Value via Power Query Editor > Manage Parameters, then Home > Refresh.
+expression ProjectFolder = "C:\Users\YourUsername\Documents\GitHub\PowerBI-Sync" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
