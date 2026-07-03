@@ -1,6 +1,6 @@
 # State Employee Credit Card — Power BI Project (PBIP)
 
-A hand-authored Power BI Project (PBIP, file-based format with TMDL semantic model and PBIR report) built from the Delaware State Employee Credit Card transaction export. No Power BI Desktop / GUI was used to build this — every TMDL, Power Query (M), and PBIR JSON file was authored directly.
+A hand-authored Power BI Project (PBIP, file-based format with TMDL semantic model and PBIR report) built from the Delaware State Employee Credit Card transaction export.
 
 ## What's in this repo
 
