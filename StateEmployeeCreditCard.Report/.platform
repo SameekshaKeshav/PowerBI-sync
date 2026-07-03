@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "StateEmployeeCreditCard"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "a1b2c3d4-0002-4a5b-8c6d-100000000002"
+  }
+}

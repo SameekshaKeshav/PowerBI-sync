@@ -1,0 +1,7 @@
+relationship a1e1a1a1-0001-4a00-8000-000000000001
+	fromColumn: Transactions.TransactionDate
+	toColumn: Date.Date
+
+relationship a1e1a1a1-0002-4a00-8000-000000000002
+	fromColumn: Transactions.CustomerKey
+	toColumn: Customer.CustomerKey

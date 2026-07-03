@@ -1,0 +1,269 @@
+table Transactions
+	lineageTag: t-transactions-0001
+
+	/// Total number of individual card transactions in the current filter context
+	measure 'Total Transaction Volume' = COUNTROWS(Transactions)
+		formatString: #,##0
+
+	/// Sum of all transaction amounts (merchandise amount) in the current filter context
+	measure 'Total Transaction Amount' = SUM(Transactions[TransactionAmount])
+		formatString: $#,##0.00
+
+	/// Average dollar value of a single transaction
+	measure 'Average Transaction Value' = AVERAGE(Transactions[TransactionAmount])
+		formatString: $#,##0.00
+
+	/// Distinct count of cardholder-group customer keys (Department | Division) seen in the current filter context
+	measure 'Total Customers' = DISTINCTCOUNT(Transactions[CustomerKey])
+		formatString: #,##0
+
+	/// Average number of transactions per customer (department/division cardholder group) in the current filter context
+	measure 'Average Transaction Frequency' = DIVIDE([Total Transaction Volume], [Total Customers], 0)
+		formatString: #,##0.00
+
+	/// Count of transactions flagged as statistical anomalies (see IsAnomalyFlag column)
+	measure 'Anomaly Count' = CALCULATE([Total Transaction Volume], Transactions[IsAnomalyFlag] = TRUE())
+		formatString: #,##0
+
+	/// Share of transactions flagged as statistical anomalies
+	measure 'Anomaly Rate' = DIVIDE([Anomaly Count], [Total Transaction Volume], 0)
+		formatString: 0.00%
+
+	/// Returns a background color for table conditional formatting: highlights anomaly-flagged rows
+	measure 'Anomaly Background Color' = IF(SELECTEDVALUE(Transactions[IsAnomalyFlag]) = TRUE(), "#FBD3D3", "#FFFFFF")
+
+	/// Calendar date of the transaction, parsed from the source TRANS_DT column (mm/dd/yyyy text)
+	column TransactionDate
+		dataType: dateTime
+		formatString: Long Date
+		sourceColumn: TransactionDate
+
+	/// State fiscal year of the transaction as recorded in the source (FISCAL_YEAR)
+	column FiscalYear
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: FiscalYear
+
+	/// State fiscal period (1-12) of the transaction as recorded in the source (FISCAL_PERIOD)
+	column FiscalPeriod
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: FiscalPeriod
+
+	/// Calendar year extracted from TransactionDate
+	column TransactionYear
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: TransactionYear
+
+	/// Calendar month number (1-12) extracted from TransactionDate
+	column TransactionMonth
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		isHidden
+		sourceColumn: TransactionMonth
+
+	/// Calendar month name extracted from TransactionDate, sorted by TransactionMonth
+	column TransactionMonthName
+		dataType: string
+		sourceColumn: TransactionMonthName
+		sortByColumn: TransactionMonth
+
+	/// ISO-style week-of-year number extracted from TransactionDate, used for weekly volume charts
+	column TransactionWeek
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: TransactionWeek
+
+	/// Weekday number extracted from TransactionDate (1 = Monday ... 7 = Sunday)
+	column TransactionWeekdayNum
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		isHidden
+		sourceColumn: TransactionWeekdayNum
+
+	/// Weekday name extracted from TransactionDate, sorted by TransactionWeekdayNum
+	column TransactionWeekdayName
+		dataType: string
+		sourceColumn: TransactionWeekdayName
+		sortByColumn: TransactionWeekdayNum
+
+	/// Year-month text key (yyyy-MM) used to plot monthly trend lines in calendar order
+	column YearMonth
+		dataType: string
+		sourceColumn: YearMonth
+
+	/// State agency / department that owns the card (source column DEPT_NAME) - used as a demographic-equivalent proxy dimension
+	column DeptName
+		dataType: string
+		sourceColumn: DeptName
+
+	/// Top-5 departments by transaction volume, all other departments grouped into "Other" - keeps the department trend chart legend readable
+	column DeptGroup
+		dataType: string
+		sourceColumn: DeptGroup
+
+	/// Division within the department that owns the card (source column DIV_NAME)
+	column DivName
+		dataType: string
+		sourceColumn: DivName
+
+	/// Proxy "customer" key (Department | Division) representing a cardholder cost-center group, since the source has no individual cardholder ID
+	column CustomerKey
+		dataType: string
+		sourceColumn: CustomerKey
+
+	/// Merchant name the transaction was made with (source column MERCHANT)
+	column Merchant
+		dataType: string
+		sourceColumn: Merchant
+
+	/// Merchant category description, acting as the "transaction type/category" dimension (source column CAT_DESCR)
+	column CategoryDescription
+		dataType: string
+		sourceColumn: CategoryDescription
+
+	/// Top-5 categories by transaction volume, all other categories grouped into "Other" - keeps bar/pie chart legends readable
+	column CategoryGroup
+		dataType: string
+		sourceColumn: CategoryGroup
+
+	/// Transaction amount in USD, cleaned from the source MERCHANDISE_AMT column (thousands separators removed); can be negative for refunds/credits
+	column TransactionAmount
+		dataType: decimal
+		formatString: $#,##0.00;($#,##0.00)
+		summarizeBy: sum
+		sourceColumn: TransactionAmount
+
+	/// Mean transaction amount for this row's category, used as the anomaly-detection baseline
+	column CategoryMeanAmount
+		dataType: decimal
+		formatString: $#,##0.00
+		summarizeBy: none
+		isHidden
+		sourceColumn: CategoryMeanAmount
+
+	/// Standard deviation of transaction amount for this row's category, used as the anomaly-detection baseline
+	column CategoryStdDevAmount
+		dataType: decimal
+		formatString: $#,##0.00
+		summarizeBy: none
+		isHidden
+		sourceColumn: CategoryStdDevAmount
+
+	/// Number of transactions observed in this row's category, used to avoid flagging anomalies in very small categories
+	column CategoryTransactionCount
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		isHidden
+		sourceColumn: CategoryTransactionCount
+
+	/// Number of standard deviations this transaction's amount is from its category's mean amount
+	column AnomalyZScore
+		dataType: decimal
+		formatString: 0.00
+		summarizeBy: none
+		sourceColumn: AnomalyZScore
+
+	/// True when a transaction's amount deviates from its category mean by more than 3 standard deviations (and the category has at least 10 transactions)
+	column IsAnomalyFlag
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: IsAnomalyFlag
+
+	partition Transactions = m
+		mode: import
+		source =
+				let
+					// Read the raw pipe-free, comma-delimited CSV export from the project's local data folder
+					Source = Csv.Document(File.Contents(ProjectFolder & "/data/State_Employee_Credit_Card.csv"), [Delimiter=",", Columns=8, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
+
+					// Promoted the first row of the CSV to become column headers
+					#"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+
+					// Set initial column types, keeping amount and date as text until they are cleaned below
+					#"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers", {{"FISCAL_YEAR", Int64.Type}, {"FISCAL_PERIOD", Int64.Type}, {"DEPT_NAME", type text}, {"DIV_NAME", type text}, {"MERCHANT", type text}, {"CAT_DESCR", type text}, {"TRANS_DT", type text}, {"MERCHANDISE_AMT", type text}}),
+
+					// Removed thousands-separator commas so amounts such as "3,427.80" convert cleanly to numbers
+					#"Removed Thousands Separators" = Table.TransformColumns(#"Changed Type", {{"MERCHANDISE_AMT", each Text.Remove(_, ","), type text}}),
+
+					// Converted the cleaned amount text and the mm/dd/yyyy date text to their proper types using the US locale
+					#"Converted Amount And Date Types" = Table.TransformColumnTypes(#"Removed Thousands Separators", {{"MERCHANDISE_AMT", type number}, {"TRANS_DT", type date}}, "en-US"),
+
+					// Trimmed stray whitespace from text fields coming from the source export
+					#"Trimmed Text Columns" = Table.TransformColumns(#"Converted Amount And Date Types", {{"DEPT_NAME", Text.Trim, type text}, {"DIV_NAME", Text.Trim, type text}, {"MERCHANT", Text.Trim, type text}, {"CAT_DESCR", Text.Trim, type text}}),
+
+					// Renamed columns to the business-friendly names used throughout the model
+					#"Renamed Columns" = Table.RenameColumns(#"Trimmed Text Columns", {{"FISCAL_YEAR", "FiscalYear"}, {"FISCAL_PERIOD", "FiscalPeriod"}, {"DEPT_NAME", "DeptName"}, {"DIV_NAME", "DivName"}, {"MERCHANT", "Merchant"}, {"CAT_DESCR", "CategoryDescription"}, {"TRANS_DT", "TransactionDate"}, {"MERCHANDISE_AMT", "TransactionAmount"}}),
+
+					// Built a proxy "customer" key from Department + Division, since the source has no individual cardholder identifier
+					#"Added Customer Key" = Table.AddColumn(#"Renamed Columns", "CustomerKey", each [DeptName] & " | " & [DivName], type text),
+
+					// Extracted the calendar year from the transaction date
+					#"Added Transaction Year" = Table.AddColumn(#"Added Customer Key", "TransactionYear", each Date.Year([TransactionDate]), Int64.Type),
+
+					// Extracted the calendar month number from the transaction date
+					#"Added Transaction Month" = Table.AddColumn(#"Added Transaction Year", "TransactionMonth", each Date.Month([TransactionDate]), Int64.Type),
+
+					// Extracted the full calendar month name from the transaction date
+					#"Added Transaction Month Name" = Table.AddColumn(#"Added Transaction Month", "TransactionMonthName", each Date.ToText([TransactionDate], "MMMM"), type text),
+
+					// Extracted the week-of-year number from the transaction date for weekly volume charts
+					#"Added Transaction Week" = Table.AddColumn(#"Added Transaction Month Name", "TransactionWeek", each Date.WeekOfYear([TransactionDate]), Int64.Type),
+
+					// Extracted a Monday-based weekday number (1-7) from the transaction date
+					#"Added Transaction Weekday Number" = Table.AddColumn(#"Added Transaction Week", "TransactionWeekdayNum", each Date.DayOfWeek([TransactionDate], Day.Monday) + 1, Int64.Type),
+
+					// Extracted the weekday name from the transaction date
+					#"Added Transaction Weekday Name" = Table.AddColumn(#"Added Transaction Weekday Number", "TransactionWeekdayName", each Date.ToText([TransactionDate], "dddd"), type text),
+
+					// Built a sortable yyyy-MM text key used to plot monthly trend lines in calendar order
+					#"Added Year Month" = Table.AddColumn(#"Added Transaction Weekday Name", "YearMonth", each Date.ToText([TransactionDate], "yyyy-MM"), type text),
+
+					// Computed per-category transaction count, mean amount and standard deviation, used both for anomaly flagging and for the top-5-category bucket below
+					#"Grouped By Category" = Table.Group(#"Added Year Month", {"CategoryDescription"}, {{"CategoryTransactionCount", each Table.RowCount(_), Int64.Type}, {"CategoryMeanAmount", each List.Average([TransactionAmount]), type number}, {"CategoryStdDevAmount", each List.StandardDeviation([TransactionAmount]), type number}}),
+
+					// Sorted categories by transaction volume so the top 5 can be identified
+					#"Sorted Categories By Volume" = Table.Sort(#"Grouped By Category", {{"CategoryTransactionCount", Order.Descending}}),
+
+					// Buffered the names of the top-5 categories by transaction volume for fast repeated lookups below
+					#"Top Categories List" = List.Buffer(Table.Column(Table.FirstN(#"Sorted Categories By Volume", 5), "CategoryDescription")),
+
+					// Computed per-department transaction count, used to identify the top 5 departments for the department trend chart
+					#"Grouped By Department" = Table.Group(#"Added Year Month", {"DeptName"}, {{"DeptTransactionCount", each Table.RowCount(_), Int64.Type}}),
+
+					// Sorted departments by transaction volume so the top 5 can be identified
+					#"Sorted Departments By Volume" = Table.Sort(#"Grouped By Department", {{"DeptTransactionCount", Order.Descending}}),
+
+					// Buffered the names of the top-5 departments by transaction volume for fast repeated lookups below
+					#"Top Departments List" = List.Buffer(Table.Column(Table.FirstN(#"Sorted Departments By Volume", 5), "DeptName")),
+
+					// Joined the per-category statistics back onto every transaction row
+					#"Merged Category Stats" = Table.NestedJoin(#"Added Year Month", {"CategoryDescription"}, #"Grouped By Category", {"CategoryDescription"}, "CategoryStats", JoinKind.LeftOuter),
+
+					// Expanded the joined category statistics into their own columns
+					#"Expanded Category Stats" = Table.ExpandTableColumn(#"Merged Category Stats", "CategoryStats", {"CategoryTransactionCount", "CategoryMeanAmount", "CategoryStdDevAmount"}),
+
+					// Collapsed every category outside the top 5 by volume into "Other" to keep category legends readable
+					#"Added Category Group" = Table.AddColumn(#"Expanded Category Stats", "CategoryGroup", each if List.Contains(#"Top Categories List", [CategoryDescription]) then [CategoryDescription] else "Other", type text),
+
+					// Collapsed every department outside the top 5 by volume into "Other" to keep the department trend chart legend readable
+					#"Added Department Group" = Table.AddColumn(#"Added Category Group", "DeptGroup", each if List.Contains(#"Top Departments List", [DeptName]) then [DeptName] else "Other", type text),
+
+					// Computed how many standard deviations this transaction's amount is from its category's mean amount
+					#"Added Anomaly Z Score" = Table.AddColumn(#"Added Department Group", "AnomalyZScore", each if [CategoryStdDevAmount] = null or [CategoryStdDevAmount] = 0 then 0 else ([TransactionAmount] - [CategoryMeanAmount]) / [CategoryStdDevAmount], type number),
+
+					// Flagged transactions more than 3 standard deviations from their category mean as anomalies, requiring at least 10 observations in the category
+					#"Added Anomaly Flag" = Table.AddColumn(#"Added Anomaly Z Score", "IsAnomalyFlag", each [CategoryTransactionCount] >= 10 and Number.Abs([AnomalyZScore]) > 3, type logical),
+
+					// Reordered columns into a business-friendly, easy-to-scan column order
+					#"Reordered Columns" = Table.ReorderColumns(#"Added Anomaly Flag", {"TransactionDate", "FiscalYear", "FiscalPeriod", "TransactionYear", "TransactionMonth", "TransactionMonthName", "TransactionWeek", "TransactionWeekdayNum", "TransactionWeekdayName", "YearMonth", "DeptName", "DeptGroup", "DivName", "CustomerKey", "Merchant", "CategoryDescription", "CategoryGroup", "TransactionAmount", "CategoryMeanAmount", "CategoryStdDevAmount", "CategoryTransactionCount", "AnomalyZScore", "IsAnomalyFlag"})
+				in
+					#"Reordered Columns"

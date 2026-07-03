@@ -1,0 +1,118 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.4.0/schema.json",
+  "name": "ScatterFrequencyVsCreditLimit",
+  "position": {
+    "x": 40,
+    "y": 740,
+    "z": 0,
+    "width": 1840,
+    "height": 300,
+    "tabOrder": 9
+  },
+  "visual": {
+    "visualType": "scatterChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Customer"
+                    }
+                  },
+                  "Property": "CustomerKey"
+                }
+              },
+              "queryRef": "Customer.CustomerKey",
+              "nativeQueryRef": "CustomerKey",
+              "displayName": "Customer (Dept | Division)"
+            }
+          ]
+        },
+        "X": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Customer"
+                    }
+                  },
+                  "Property": "TransactionCount"
+                }
+              },
+              "queryRef": "Customer.TransactionCount",
+              "nativeQueryRef": "TransactionCount",
+              "displayName": "Transaction Frequency (proxy)"
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Customer"
+                    }
+                  },
+                  "Property": "CreditLimitProxy"
+                }
+              },
+              "queryRef": "Customer.CreditLimitProxy",
+              "nativeQueryRef": "CreditLimitProxy",
+              "displayName": "Credit Limit (proxy)"
+            }
+          ]
+        },
+        "Size": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Customer"
+                    }
+                  },
+                  "Property": "TotalSpend"
+                }
+              },
+              "queryRef": "Customer.TotalSpend",
+              "nativeQueryRef": "TotalSpend",
+              "displayName": "Total Spend"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Transaction Frequency vs. Credit Limit (Proxy) by Customer'"
+                }
+              }
+            },
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

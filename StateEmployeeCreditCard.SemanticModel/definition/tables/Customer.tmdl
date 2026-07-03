@@ -1,0 +1,72 @@
+table Customer
+	lineageTag: t-customer-0001
+
+	/// Average proxy credit limit across customers (department/division cardholder groups) in the current filter context
+	measure 'Average Credit Limit' = AVERAGE(Customer[CreditLimitProxy])
+		formatString: $#,##0.00
+
+	/// Proxy "customer" key (Department | Division) representing a cardholder cost-center group, since the source has no individual cardholder ID. One row per distinct group.
+	column CustomerKey
+		dataType: string
+		sourceColumn: CustomerKey
+
+	/// State agency / department for this customer group - used as the demographic-equivalent proxy dimension
+	column DeptName
+		dataType: string
+		sourceColumn: DeptName
+
+	/// Division within the department for this customer group
+	column DivName
+		dataType: string
+		sourceColumn: DivName
+
+	/// Total number of transactions made by this customer group - proxy for transaction frequency
+	column TransactionCount
+		dataType: int64
+		formatString: #,##0
+		summarizeBy: sum
+		sourceColumn: TransactionCount
+
+	/// Total dollar amount spent by this customer group across all transactions
+	column TotalSpend
+		dataType: decimal
+		formatString: $#,##0.00
+		summarizeBy: sum
+		sourceColumn: TotalSpend
+
+	/// Average dollar amount per transaction for this customer group
+	column AvgTransactionAmount
+		dataType: decimal
+		formatString: $#,##0.00
+		summarizeBy: average
+		sourceColumn: AvgTransactionAmount
+
+	/// Largest single transaction amount observed for this customer group - used to derive the credit limit proxy
+	column MaxTransactionAmount
+		dataType: decimal
+		formatString: $#,##0.00
+		summarizeBy: none
+		isHidden
+		sourceColumn: MaxTransactionAmount
+
+	/// Proxy for credit limit: 3x the largest single transaction observed for this customer group. The source data has no real credit-limit field, so this approximates a reasonable spending ceiling from observed behavior.
+	column CreditLimitProxy
+		dataType: decimal
+		formatString: $#,##0.00
+		summarizeBy: average
+		sourceColumn: CreditLimitProxy
+
+	partition Customer = m
+		mode: import
+		source =
+				let
+					// Started from the already-cleaned Transactions query so both tables stay perfectly consistent
+					Source = Transactions,
+
+					// Grouped every transaction row up to its cardholder-group "customer" proxy (Department + Division)
+					#"Grouped By Customer" = Table.Group(Source, {"CustomerKey", "DeptName", "DivName"}, {{"TransactionCount", each Table.RowCount(_), Int64.Type}, {"TotalSpend", each List.Sum([TransactionAmount]), type number}, {"AvgTransactionAmount", each List.Average([TransactionAmount]), type number}, {"MaxTransactionAmount", each List.Max([TransactionAmount]), type number}}),
+
+					// Derived a proxy credit limit as 3x the largest single transaction observed for the group, since the source has no real credit-limit field
+					#"Added Credit Limit Proxy" = Table.AddColumn(#"Grouped By Customer", "CreditLimitProxy", each Number.Round([MaxTransactionAmount] * 3, 2), type number)
+				in
+					#"Added Credit Limit Proxy"

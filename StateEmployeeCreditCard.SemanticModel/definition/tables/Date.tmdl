@@ -1,0 +1,93 @@
+table Date
+	lineageTag: t-date-0001
+	dataCategory: Time
+
+	/// Calendar date, contiguous across the full years spanning the transaction data. Marked as the model's official Date Table.
+	column Date
+		dataType: dateTime
+		formatString: Long Date
+		isKey
+		sourceColumn: Date
+
+	/// Calendar year
+	column Year
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: Year
+
+	/// Calendar quarter, e.g. "Q1"
+	column Quarter
+		dataType: string
+		sourceColumn: Quarter
+
+	/// Calendar month number (1-12), used to sort MonthName
+	column MonthNumber
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		isHidden
+		sourceColumn: MonthNumber
+
+	/// Calendar month name, sorted by MonthNumber
+	column MonthName
+		dataType: string
+		sourceColumn: MonthName
+		sortByColumn: MonthNumber
+
+	/// Sortable yyyy-MM text key used to plot monthly trend lines in calendar order
+	column YearMonth
+		dataType: string
+		sourceColumn: YearMonth
+
+	/// ISO-style week-of-year number
+	column WeekOfYear
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		sourceColumn: WeekOfYear
+
+	/// Weekday number, Monday-based (1 = Monday ... 7 = Sunday), used to sort WeekdayName
+	column WeekdayNumber
+		dataType: int64
+		formatString: 0
+		summarizeBy: none
+		isHidden
+		sourceColumn: WeekdayNumber
+
+	/// Weekday name, sorted by WeekdayNumber
+	column WeekdayName
+		dataType: string
+		sourceColumn: WeekdayName
+		sortByColumn: WeekdayNumber
+
+	partition Date = m
+		mode: import
+		source =
+				let
+					// Started from the already-cleaned Transactions query so the calendar always covers the real data range
+					Source = Transactions,
+
+					// Anchored the calendar to the start of the first transaction year and the end of the last transaction year, for clean year-over-year comparisons
+					MinDate = Date.StartOfYear(List.Min(Source[TransactionDate])),
+					MaxDate = Date.EndOfYear(List.Max(Source[TransactionDate])),
+					NumberOfDays = Duration.Days(MaxDate - MinDate) + 1,
+
+					// Generated one row per contiguous calendar day with no gaps, as required for DAX time intelligence
+					#"Generated Date List" = List.Dates(MinDate, NumberOfDays, #duration(1, 0, 0, 0)),
+					#"Converted to Table" = Table.FromList(#"Generated Date List", Splitter.SplitByNothing(), {"Date"}),
+					#"Changed Type" = Table.TransformColumnTypes(#"Converted to Table", {{"Date", type date}}),
+
+					// Added calendar year, quarter, month and week attributes used across the report's time-based visuals and slicers
+					#"Added Year" = Table.AddColumn(#"Changed Type", "Year", each Date.Year([Date]), Int64.Type),
+					#"Added Quarter" = Table.AddColumn(#"Added Year", "Quarter", each "Q" & Number.ToText(Date.QuarterOfYear([Date])), type text),
+					#"Added Month Number" = Table.AddColumn(#"Added Quarter", "MonthNumber", each Date.Month([Date]), Int64.Type),
+					#"Added Month Name" = Table.AddColumn(#"Added Month Number", "MonthName", each Date.ToText([Date], "MMMM"), type text),
+					#"Added Year Month" = Table.AddColumn(#"Added Month Name", "YearMonth", each Date.ToText([Date], "yyyy-MM"), type text),
+					#"Added Week Of Year" = Table.AddColumn(#"Added Year Month", "WeekOfYear", each Date.WeekOfYear([Date]), Int64.Type),
+					#"Added Weekday Number" = Table.AddColumn(#"Added Week Of Year", "WeekdayNumber", each Date.DayOfWeek([Date], Day.Monday) + 1, Int64.Type),
+					#"Added Weekday Name" = Table.AddColumn(#"Added Weekday Number", "WeekdayName", each Date.ToText([Date], "dddd"), type text)
+				in
+					#"Added Weekday Name"
+
+	annotation IsDateTable = true

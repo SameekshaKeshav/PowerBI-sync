@@ -1,0 +1,3 @@
+/// Root folder of the StateEmployeeCreditCard PBIP project on disk. The CSV is read from "<ProjectFolder>/data/State_Employee_Credit_Card.csv".
+/// If you move the project folder, update this parameter's Current Value via Power Query Editor > Manage Parameters, then Home > Refresh.
+expression ProjectFolder = "/Users/skeshav/Projects/powerbi-project" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
